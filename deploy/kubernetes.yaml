@@ -1,0 +1,75 @@
+# Example manifests. The service is stateless, so any number of replicas works.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ym-alert-proxy
+type: Opaque
+stringData:
+  YANDEX_TOKEN: "<bot-oauth-token>"
+  WEBHOOK_TOKEN: "<shared-secret>"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ym-alert-proxy
+data:
+  ALERTMANAGER_BASE_URL: "https://alertmanager.example.com"
+  BACKEND_CHAT_ID: "<chat-id>"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ym-alert-proxy
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ym-alert-proxy
+  template:
+    metadata:
+      labels:
+        app: ym-alert-proxy
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+      containers:
+        - name: ym-alert-proxy
+          image: ym-alert-proxy:latest
+          ports:
+            - containerPort: 5000
+          envFrom:
+            - secretRef:
+                name: ym-alert-proxy
+            - configMapRef:
+                name: ym-alert-proxy
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ym-alert-proxy
+spec:
+  selector:
+    app: ym-alert-proxy
+  ports:
+    - port: 5000
+      targetPort: 5000
